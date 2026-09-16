@@ -30,7 +30,7 @@ void PicoI2S_verifyPIOClockDivision(float frequencyRatio) {
     }
 
     float integral;
-    float fractional = modff(frequencyRatio, &integral);
+    modff(frequencyRatio, &integral);
 
     // The library supports clock ratios less than 256.
     if (integral > 255.0f) {
@@ -38,15 +38,28 @@ void PicoI2S_verifyPIOClockDivision(float frequencyRatio) {
             frequencyRatio);
     }
 
-    // The PIO divider stores 8 fractional bits, so a ratio is
-    // representable only if its fractional part is a multiple of 1/256.
-    float scaled = fractional * 256.0f;
-    float scaledIntegral;
-    float remainder = modff(scaled, &scaledIntegral);
+    /*
+     * The PIO divider stores 8 fractional bits, so the ratio is rounded to the
+     * nearest 1/256 in hardware. Check what that rounding costs rather than
+     * requiring the ratio to land on a representable value exactly.
+     *
+     * Exactness is a stronger demand than the hardware makes, and it rejects
+     * the standard audio rates almost everywhere. At 32-bit stereo, 11025,
+     * 22050 and 44100 Hz all give fractional dividers at 128, 138 and 150 MHz
+     * alike; only 8000 Hz happens to divide exactly. 22050 Hz at 138 MHz needs
+     * 48.894558, which the divider rounds to 48.894531 - a real rate of
+     * 22050.012 Hz, an error of 0.5 ppm, four orders of magnitude below
+     * anything audible.
+     *
+     * See PioI2S_MAX_CLOCK_ERROR_PPM in pio-i2s-config.h for the tolerance and
+     * why its default accepts every ratio the hardware can express.
+     */
+    float rounded = roundf(frequencyRatio * 256.0f) / 256.0f;
+    float errorPpm = fabsf(rounded - frequencyRatio) / frequencyRatio * 1e6f;
 
-    if (remainder > 0.0f) {
-        panic("PIO clock ratio %f cannot be represented accurately.",
-            frequencyRatio);
+    if (errorPpm > (float) PioI2S_MAX_CLOCK_ERROR_PPM) {
+        panic("PIO clock ratio %f rounds to %f: %f ppm sample rate error.",
+            frequencyRatio, rounded, errorPpm);
     }
 }
 
