@@ -145,7 +145,6 @@ void PioI2S_init(struct PioI2S* self, struct PioI2S_Config* config,
     self->outputDoubleBuffer = outputDoubleBuffer;
     self->bufferPointers[0] = &self->outputDoubleBuffer[0];
     self->bufferPointers[1] = &self->outputDoubleBuffer[self->stereoBlockSize];
-    self->bufferPointerIdx = 0;
     self->dmaHandler = dmaHandler;
 
     if (self->config->dmaIRQ != DMA_IRQ_0 && self->config->dmaIRQ != DMA_IRQ_1) {
@@ -164,8 +163,25 @@ void PioI2S_start(struct PioI2S* self) {
 }
 
 inline int32_t* PioI2S_nextOutputBuffer(struct PioI2S* self) {
-    int32_t* bufferToFill = self->bufferPointers[self->bufferPointerIdx];
-    self->bufferPointerIdx = 1 - self->bufferPointerIdx;
+    // The half to fill is the one the data channel is not reading, found by
+    // asking it rather than by counting interrupts. The completion flag is one
+    // bit: if the handler is held off past the end of the next block, two
+    // completions arrive as one interrupt, and a count left to alternate on its
+    // own is from then on filling the half being played - every block torn,
+    // for as long as the program runs.
+    //
+    // The halves are contiguous (PioI2S_init lays them out so), so the address
+    // that ends the first is the one that starts the second: a channel sitting
+    // there has moved on to the second half. One past the end of the second
+    // half is a channel that has just finished it and is about to wrap to the
+    // first, so the second is the one to fill.
+    //
+    // In 32 bits, because that is what the read address register holds.
+    uint32_t reading = dma_hw->ch[self->dataChannel].read_addr;
+    uint32_t second = (uint32_t) (uintptr_t) self->bufferPointers[1];
+    uint32_t secondEnd = second + (uint32_t) (self->stereoBlockSize * sizeof(int32_t));
+    int32_t* bufferToFill = (reading >= second && reading < secondEnd)
+        ? self->bufferPointers[0] : self->bufferPointers[1];
 #if PioI2S_ZERO_ON_UNDERRUN
     memset(bufferToFill, 0, self->stereoBlockSize * sizeof(*bufferToFill));
 #endif

@@ -27,7 +27,6 @@ static void testInitConfiguresInstanceFields(void) {
     TEST_ASSERT_EQUAL_INT(TEST_DOUBLE_BUFFER_SIZE, self.doubleBufferSize);
     TEST_ASSERT_EQUAL_PTR(&output[0], self.bufferPointers[0]);
     TEST_ASSERT_EQUAL_PTR(&output[TEST_STEREO_BLOCK_SIZE], self.bufferPointers[1]);
-    TEST_ASSERT_EQUAL_INT(0, self.bufferPointerIdx);
     TEST_ASSERT_EQUAL_UINT64(0, self.startTime);
     TEST_ASSERT_EQUAL_UINT64(0, self.numBlocksTransferred);
 

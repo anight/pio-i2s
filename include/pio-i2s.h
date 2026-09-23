@@ -124,11 +124,6 @@ struct PioI2S {
     __attribute__((aligned(8))) int32_t* bufferPointers[2];
 
     /**
-     * @brief The index of the current output buffer.
-     */
-    int32_t bufferPointerIdx;
-
-    /**
      * @brief A pointer to the DMA interrupt handler function.
      */
     void(*dmaHandler)(void);
@@ -206,6 +201,11 @@ void PioI2S_start(struct PioI2S* self);
 
 /**
  * @brief Selects the output buffer to refill during the current DMA interrupt.
+ *
+ * This is the half of the double buffer the DMA is not reading, taken from
+ * the data channel's read address. It does not depend on the handler seeing
+ * every interrupt: one delayed past the end of the next block, so that two
+ * completions arrive as one, still gets the free half.
  *
  * If `PioI2S_ZERO_ON_UNDERRUN` is set to 1 in pio-i2s-config.h, the buffer is
  * zeroed before it is returned.
